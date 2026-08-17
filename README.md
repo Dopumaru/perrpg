@@ -1,10 +1,10 @@
 # Pixel's Realm
 
-Protótipo jogável de um mini MMORPG 2D em pixel art, com sistema de nível, stats, loot, combate por proximidade, árvore de skills e personagens desenhados como sprites animados.
+Protótipo jogável de um mini MMORPG 2D em pixel art, com sistema de nível, stats, loot, combate por proximidade, árvore de skills e um sprite real animado para o jogador.
 
 ## Como jogar
 
-Abra o arquivo `index.html` diretamente no navegador (não precisa de servidor).
+Abra o arquivo `index.html` diretamente no navegador (não precisa de servidor, mas precisa de internet para carregar o sprite do jogador).
 
 Controles:
 - `W A S D` ou setas: mover o personagem
@@ -13,16 +13,27 @@ Controles:
 
 Os ataques são **automáticos por proximidade**: se um inimigo entrar no raio de alcance da arma equipada, o personagem ataca sozinho, sem precisar apertar um botão de ataque.
 
-## Sprites e animações
+## Sprite real do jogador
 
-Os personagens não são mais blocos estáticos. O jogador e os inimigos são desenhados por partes (cabeça, tronco, braços, pernas) diretamente no canvas e animados em tempo real:
+O jogador agora usa um spritesheet real em pixel art, carregado diretamente do projeto open source **Universal LPC Spritesheet Character Generator** (Liberated Pixel Cup), com animações de:
 
-- **Ciclo de andar**: as pernas alternam e o corpo balança levemente enquanto o personagem se move.
-- **Golpe de espada**: o braço da frente gira segurando a espada durante o ataque corpo a corpo.
-- **Disparo de arco**: a corda do arco é puxada e solta de forma sincronizada com o disparo do projétil.
-- **Inimigos**: têm um leve "squash and stretch" ao se mover, olhos que acompanham o movimento, piscam em branco ao serem atingidos e encolhem/desaparecem com uma animação de morte antes de reaparecer.
+- **Andar** (9 quadros por direção),
+- **Golpe de espada** (6 quadros por direção),
+- **Disparo de arco** (13 quadros por direção),
 
-Como o projeto ainda não tem uma folha de sprites (spritesheet) própria em arte pixel, essas animações foram construídas processualmente em canvas (desenhando e transformando formas a cada frame). Isso já entrega personagens com jogabilidade e animação reais; o próximo passo natural é substituir esse desenho processual por sprites desenhados à mão ou gerados em pixel art, caso vocês queiram trazer arte própria para o projeto.
+tudo recortado do spritesheet oficial em tempo real, por direção (cima, baixo, esquerda, direita).
+
+Caso o sprite não carregue (por exemplo, sem conexão à internet), o jogo usa automaticamente um personagem desenhado processualmente em canvas como alternativa, para nunca deixar a tela em branco.
+
+### Créditos e licença do sprite
+
+O corpo do jogador (`body/bodies/male/light.png`) vem do projeto **Liberated Pixel Cup / Universal LPC Spritesheet**, licenciado sob **CC-BY-SA 3.0 e GPL 3.0**. Autores contribuintes desse conjunto de arte: bluecarrot16, Benjamin K. Smith (BenCreating), Evert, Eliza Wyatt (ElizaWy), TheraHedwig, MuffinElZangano, Durrani, Johannes Sjölund (wulax), Stephen Challener (Redshrike).
+
+Fonte do projeto: [Universal-LPC-Spritesheet-Character-Generator](https://github.com/sanderfrenken/Universal-LPC-Spritesheet-Character-Generator) · [OpenGameArt - LPC Character Bases](https://opengameart.org/content/lpc-character-bases)
+
+Se este projeto for distribuído publicamente, mantenha esta seção de créditos, conforme exigido pela licença CC-BY-SA / GPL.
+
+Os **inimigos** ainda são desenhados processualmente em canvas (não usam spritesheet), com squash-and-stretch ao se mover, flash de dano e animação de morte. Substituí-los por um sprite real (por exemplo, o esqueleto do mesmo projeto LPC) é um próximo passo natural.
 
 ## Sistema de combate por arma
 
@@ -55,13 +66,14 @@ index.html              -> tela principal do protótipo jogável, com HUD e moda
 assets/ui/style.css      -> estilos do HUD, HUD de skills e modal de escolha de habilidade
 assets/backgrounds/      -> imagens de fundo usadas em outras telas do projeto
 screens/                 -> telas adicionais (criação de personagem, etc.)
-src/game.js              -> lógica principal: movimento, armas, combate por proximidade, XP, skills, loot e sprites animados
+src/game.js              -> lógica principal: movimento, armas, combate por proximidade, XP, skills, loot e sprite real do jogador
 src/main.js              -> lógica da tela inicial (título animado)
 ```
 
 ## Próximos passos sugeridos
 
-- Substituir o desenho processual por spritesheets reais em pixel art (idle, andar, ataque, morte, por direção).
+- Substituir o monstro processual por um sprite real de inimigo (ex.: esqueleto do mesmo projeto LPC).
+- Baixar o spritesheet e hospedá-lo dentro do próprio repositório, em vez de carregá-lo de uma URL externa.
 - Adicionar inventário visual e equipamento de itens obtidos como loot.
 - Conectar a tela de criação de personagem para definir a arma e a classe inicial do jogador.
 - Adicionar sons e efeitos visuais de combate (corte, disparo de flecha, acerto crítico).

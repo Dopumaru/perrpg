@@ -20,6 +20,28 @@ window.addEventListener('keydown', e => {
 });
 window.addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
 
+// ---------- Sprite real do jogador (Universal LPC Spritesheet) ----------
+// Fonte: Liberated Pixel Cup / Universal-LPC-Spritesheet-Character-Generator (CC-BY-SA 3.0 / GPL 3.0)
+// https://github.com/sanderfrenken/Universal-LPC-Spritesheet-Character-Generator
+const SPRITE_SHEET_URL = 'https://raw.githubusercontent.com/sanderfrenken/Universal-LPC-Spritesheet-Character-Generator/675e21e04aaff8486a3a24e09573b3d5af9d28b9/spritesheets/body/bodies/male/light.png';
+const bodySprite = new Image();
+bodySprite.crossOrigin = 'anonymous';
+let bodySpriteReady = false;
+bodySprite.onload = () => { bodySpriteReady = true; };
+bodySprite.onerror = () => { bodySpriteReady = false; };
+bodySprite.src = SPRITE_SHEET_URL;
+
+const FRAME = 64;
+const DIR_ROW = { up: 0, left: 1, down: 2, right: 3 };
+const SPRITE_BLOCKS = {
+  spellcast: { row: 0, frames: 7 },
+  thrust: { row: 4, frames: 8 },
+  walk: { row: 8, frames: 9 },
+  slash: { row: 12, frames: 6 },
+  shoot: { row: 16, frames: 13 },
+  hurt: { row: 20, frames: 6 }
+};
+
 // ---------- Armas ----------
 const WEAPONS = {
   sword: { type: 'melee', name: 'Espada Curta', range: 58, cooldown: 0.55 },
@@ -148,6 +170,7 @@ function tryAutoAttack(dt){
   if (!nearest) return;
 
   player.attackTimer = weapon.cooldown * player.cooldownMultiplier;
+  player.attackDuration = weapon.type === 'melee' ? 0.32 : 0.55;
   player.attacking = player.attackDuration;
 
   const dx = nearest.x - player.x, dy = nearest.y - player.y;
@@ -281,9 +304,9 @@ function drawGround(){
   for (let y = startY; y < canvas.height; y += WORLD.tile) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke(); }
 }
 
-// ---------- Sprite do jogador (desenhado por partes animadas) ----------
-function drawHumanoid(sx, sy, opts){
-  const { walkTime, moving, facing, attacking, attackDuration, weaponType, size, skinColor, tunicColor, hairColor } = opts;
+// ---------- Sprite do jogador desenhado processualmente (fallback) ----------
+function drawHumanoidFallback(sx, sy, opts){
+  const { walkTime, moving, facing, attacking, attackDuration, weaponType, skinColor, tunicColor, hairColor } = opts;
   const legSwing = moving ? Math.sin(walkTime) * 6 : Math.sin(walkTime) * 1.2;
   const bob = moving ? Math.abs(Math.sin(walkTime)) * 2.4 : Math.abs(Math.sin(walkTime * 0.6)) * 0.6;
   const attackProgress = attacking > 0 ? 1 - (attacking / attackDuration) : null;
@@ -291,12 +314,10 @@ function drawHumanoid(sx, sy, opts){
   ctx.save();
   ctx.translate(sx, sy - bob);
 
-  // pernas
   ctx.fillStyle = '#1b2433';
   ctx.fillRect(-9, 6 + legSwing * 0.4, 8, 16 - legSwing);
   ctx.fillRect(1, 6 - legSwing * 0.4, 8, 16 + legSwing);
 
-  // corpo / túnica
   ctx.fillStyle = tunicColor;
   ctx.beginPath();
   ctx.moveTo(-12, -14);
@@ -308,11 +329,9 @@ function drawHumanoid(sx, sy, opts){
   ctx.fillStyle = 'rgba(0,0,0,0.15)';
   ctx.fillRect(-12, 4, 24, 4);
 
-  // braço de trás
   ctx.fillStyle = skinColor;
   ctx.fillRect(facing === 'left' ? 8 : -12, -8, 6, 14);
 
-  // cabeça
   ctx.fillStyle = skinColor;
   ctx.fillRect(-8, -30, 16, 16);
   ctx.fillStyle = hairColor;
@@ -320,7 +339,6 @@ function drawHumanoid(sx, sy, opts){
   if (facing === 'left') ctx.fillRect(-9, -30, 5, 12);
   if (facing === 'right') ctx.fillRect(4, -30, 5, 12);
 
-  // braço da frente + arma
   const shoulderX = facing === 'left' ? -10 : 10;
   ctx.save();
   ctx.translate(shoulderX, -6);
@@ -361,15 +379,51 @@ function drawHumanoid(sx, sy, opts){
   ctx.restore();
 }
 
+// ---------- Sprite real do jogador (spritesheet LPC) ----------
+function drawPlayerSprite(sx, sy){
+  const weapon = WEAPONS[player.weaponKey];
+  const dirRow = DIR_ROW[player.facing];
+  let block, frameIndex;
+
+  if (player.attacking > 0) {
+    const progress = 1 - (player.attacking / player.attackDuration);
+    block = weapon.type === 'melee' ? SPRITE_BLOCKS.slash : SPRITE_BLOCKS.shoot;
+    frameIndex = Math.min(block.frames - 1, Math.floor(progress * block.frames));
+  } else if (player.moving) {
+    block = SPRITE_BLOCKS.walk;
+    frameIndex = Math.floor((player.walkTime * 1.5) % block.frames);
+  } else {
+    block = SPRITE_BLOCKS.walk;
+    frameIndex = 0;
+  }
+
+  const row = block.row + dirRow;
+  const srcX = frameIndex * FRAME;
+  const srcY = row * FRAME;
+  const scale = 1.7;
+  const dw = FRAME * scale, dh = FRAME * scale;
+
+  ctx.save();
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(bodySprite, srcX, srcY, FRAME, FRAME, sx - dw / 2, sy - dh * 0.72, dw, dh);
+  ctx.restore();
+}
+
 function drawPlayer(){
   const sx = player.x - camera.x, sy = player.y - camera.y;
   const weapon = WEAPONS[player.weaponKey];
-  drawHumanoid(sx, sy, {
-    walkTime: player.walkTime, moving: player.moving, facing: player.facing,
-    attacking: player.attacking, attackDuration: player.attackDuration,
-    weaponType: weapon.type, size: player.size,
-    skinColor: '#c98f66', tunicColor: '#2c4d82', hairColor: '#2c241f'
-  });
+
+  if (bodySpriteReady) {
+    drawPlayerSprite(sx, sy);
+  } else {
+    drawHumanoidFallback(sx, sy, {
+      walkTime: player.walkTime, moving: player.moving, facing: player.facing,
+      attacking: player.attacking, attackDuration: player.attackDuration,
+      weaponType: weapon.type,
+      skinColor: '#c98f66', tunicColor: '#2c4d82', hairColor: '#2c241f'
+    });
+  }
+
   if (player.attacking > 0) {
     ctx.save();
     ctx.translate(sx, sy);
@@ -382,7 +436,7 @@ function drawPlayer(){
   }
 }
 
-// ---------- Sprite dos inimigos ----------
+// ---------- Sprite dos inimigos (procedural) ----------
 function drawEnemySprite(sx, sy, e){
   const squish = e.moving ? Math.abs(Math.sin(e.animTime * 6)) * 0.12 : Math.abs(Math.sin(e.animTime * 2)) * 0.04;
   let scaleX = 1 + squish, scaleY = 1 - squish, alpha = 1;
