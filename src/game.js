@@ -1,7 +1,7 @@
 // Pixel's Realm - protótipo jogável
 // Movimentação top-down, ataques automáticos por proximidade (corpo a corpo / distância),
-// sistema de nível/XP com modal de escolha de skills, loot básico e personagens
-// desenhados como sprites animados em canvas (ciclo de andar, golpe de ataque, dano e morte).
+// sistema de nível/XP com modal de escolha de skills, loot básico, sprite real do jogador
+// e várias variações de inimigos com sprites reais (Universal LPC Spritesheet).
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -20,16 +20,17 @@ window.addEventListener('keydown', e => {
 });
 window.addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
 
-// ---------- Sprite real do jogador (Universal LPC Spritesheet) ----------
+// ---------- Sprites reais (Universal LPC Spritesheet) ----------
 // Fonte: Liberated Pixel Cup / Universal-LPC-Spritesheet-Character-Generator (CC-BY-SA 3.0 / GPL 3.0)
 // https://github.com/sanderfrenken/Universal-LPC-Spritesheet-Character-Generator
-const SPRITE_SHEET_URL = 'https://raw.githubusercontent.com/sanderfrenken/Universal-LPC-Spritesheet-Character-Generator/675e21e04aaff8486a3a24e09573b3d5af9d28b9/spritesheets/body/bodies/male/light.png';
+const LPC_BASE = 'https://raw.githubusercontent.com/sanderfrenken/Universal-LPC-Spritesheet-Character-Generator/675e21e04aaff8486a3a24e09573b3d5af9d28b9/spritesheets';
+
 const bodySprite = new Image();
 bodySprite.crossOrigin = 'anonymous';
 let bodySpriteReady = false;
 bodySprite.onload = () => { bodySpriteReady = true; };
 bodySprite.onerror = () => { bodySpriteReady = false; };
-bodySprite.src = SPRITE_SHEET_URL;
+bodySprite.src = `${LPC_BASE}/body/bodies/male/light.png`;
 
 const FRAME = 64;
 const DIR_ROW = { up: 0, left: 1, down: 2, right: 3 };
@@ -41,6 +42,24 @@ const SPRITE_BLOCKS = {
   shoot: { row: 16, frames: 13 },
   hurt: { row: 20, frames: 6 }
 };
+
+// ---------- Variações de inimigos (mesmo layout de spritesheet do esqueleto) ----------
+const ENEMY_TYPES = [
+  { key: 'skeleton', name: 'Esqueleto', color: 'light', hp: 18, str: 3, speed: 70, xp: 12, gold: [2, 6], size: 24 },
+  { key: 'skeleton_dark', name: 'Esqueleto Sombrio', color: 'black', hp: 26, str: 4, speed: 62, xp: 18, gold: [4, 9], size: 25 },
+  { key: 'skeleton_frost', name: 'Esqueleto Gélido', color: 'blue', hp: 20, str: 3, speed: 82, xp: 16, gold: [3, 8], size: 24 },
+  { key: 'zombie', name: 'Zumbi', color: 'zombie', hp: 34, str: 2, speed: 45, xp: 20, gold: [3, 7], size: 27 },
+  { key: 'zombie_toxic', name: 'Zumbi Tóxico', color: 'zombie_green', hp: 24, str: 5, speed: 55, xp: 22, gold: [5, 10], size: 26 }
+];
+
+ENEMY_TYPES.forEach(type => {
+  type.img = new Image();
+  type.img.crossOrigin = 'anonymous';
+  type.ready = false;
+  type.img.onload = () => { type.ready = true; };
+  type.img.onerror = () => { type.ready = false; };
+  type.img.src = `${LPC_BASE}/body/bodies/skeleton/universal/${type.color}.png`;
+});
 
 // ---------- Armas ----------
 const WEAPONS = {
@@ -132,17 +151,23 @@ function gainXP(amount){
 }
 
 // ---------- Inimigos ----------
-function makeEnemy(x, y){
+function pickEnemyType(){
+  return ENEMY_TYPES[Math.floor(Math.random() * ENEMY_TYPES.length)];
+}
+
+function makeEnemy(x, y, forcedType){
+  const type = forcedType || pickEnemyType();
   return {
-    x, y, size: 24, hp: 18, hpMax: 18, str: 3, speed: 70,
-    xpReward: 12, goldReward: [2, 6], alive: true, hitFlash: 0,
+    type,
+    x, y, size: type.size, hp: type.hp, hpMax: type.hp, str: type.str, speed: type.speed,
+    xpReward: type.xp, goldReward: type.gold, alive: true, hitFlash: 0,
     wanderAngle: Math.random() * Math.PI * 2, wanderTimer: 0,
-    animTime: Math.random() * 10, deathAnim: -1, moving: false
+    animTime: Math.random() * 10, deathAnim: -1, moving: false, facing: 'down'
   };
 }
 
 let enemies = [];
-for (let i = 0; i < 10; i++) {
+for (let i = 0; i < 12; i++) {
   enemies.push(makeEnemy(200 + Math.random() * (WORLD.w - 400), 200 + Math.random() * (WORLD.h - 400)));
 }
 
@@ -194,7 +219,7 @@ function tryAutoAttack(dt){
 function hitEnemy(e, overrideDmg){
   const dmg = overrideDmg != null ? overrideDmg : Math.max(1, player.str);
   e.hp -= dmg;
-  e.hitFlash = 0.15;
+  e.hitFlash = 0.18;
   if (e.hp <= 0 && e.alive) {
     e.alive = false;
     e.deathAnim = 0;
@@ -202,16 +227,22 @@ function hitEnemy(e, overrideDmg){
     const gold = Math.floor(e.goldReward[0] + Math.random() * (e.goldReward[1] - e.goldReward[0]));
     player.gold += gold;
     const loot = rollLoot(player.lootBonus);
-    if (loot) logLoot(`+${gold} ouro · ${loot.name} (${loot.rarity})`);
-    else logLoot(`+${gold} ouro`);
+    if (loot) logLoot(`+${gold} ouro · ${loot.name} (${loot.rarity}) · ${e.type.name}`);
+    else logLoot(`+${gold} ouro · ${e.type.name}`);
     updateHud();
     setTimeout(() => respawnEnemy(e), 3500);
   }
 }
 
 function respawnEnemy(e){
+  e.type = pickEnemyType();
+  e.size = e.type.size;
+  e.hp = e.hpMax = e.type.hp;
+  e.str = e.type.str;
+  e.speed = e.type.speed;
+  e.xpReward = e.type.xp;
+  e.goldReward = e.type.gold;
   e.alive = true;
-  e.hp = e.hpMax;
   e.deathAnim = -1;
   e.x = 200 + Math.random() * (WORLD.w - 400);
   e.y = 200 + Math.random() * (WORLD.h - 400);
@@ -267,6 +298,7 @@ function update(dt){
     const dist = Math.hypot(dx2, dy2);
     if (dist < 240) {
       e.moving = true;
+      e.facing = Math.abs(dx2) > Math.abs(dy2) ? (dx2 > 0 ? 'right' : 'left') : (dy2 > 0 ? 'down' : 'up');
       e.x += (dx2 / dist) * e.speed * dt;
       e.y += (dy2 / dist) * e.speed * dt;
       if (dist < e.size + player.size * 0.5) {
@@ -281,8 +313,10 @@ function update(dt){
         e.wanderTimer = 1.5 + Math.random() * 1.5;
       }
       e.moving = true;
-      e.x += Math.cos(e.wanderAngle) * e.speed * 0.35 * dt;
-      e.y += Math.sin(e.wanderAngle) * e.speed * 0.35 * dt;
+      const wdx = Math.cos(e.wanderAngle), wdy = Math.sin(e.wanderAngle);
+      e.facing = Math.abs(wdx) > Math.abs(wdy) ? (wdx > 0 ? 'right' : 'left') : (wdy > 0 ? 'down' : 'up');
+      e.x += wdx * e.speed * 0.35 * dt;
+      e.y += wdy * e.speed * 0.35 * dt;
     }
     e.x = Math.max(20, Math.min(WORLD.w - 20, e.x));
     e.y = Math.max(20, Math.min(WORLD.h - 20, e.y));
@@ -436,8 +470,8 @@ function drawPlayer(){
   }
 }
 
-// ---------- Sprite dos inimigos (procedural) ----------
-function drawEnemySprite(sx, sy, e){
+// ---------- Sprite processual dos inimigos (fallback) ----------
+function drawEnemyFallback(sx, sy, e){
   const squish = e.moving ? Math.abs(Math.sin(e.animTime * 6)) * 0.12 : Math.abs(Math.sin(e.animTime * 2)) * 0.04;
   let scaleX = 1 + squish, scaleY = 1 - squish, alpha = 1;
 
@@ -471,13 +505,34 @@ function drawEnemySprite(sx, sy, e){
   ctx.fillRect(3 + eyeOffset, -e.size / 2 + 2, 4, 4);
 
   ctx.restore();
+}
 
-  if (e.alive) {
-    ctx.fillStyle = 'rgba(0,0,0,.5)';
-    ctx.fillRect(sx - e.size / 2, sy - e.size / 2 - 10, e.size, 4);
-    ctx.fillStyle = '#e05c5c';
-    ctx.fillRect(sx - e.size / 2, sy - e.size / 2 - 10, e.size * (e.hp / e.hpMax), 4);
+// ---------- Sprite real dos inimigos (spritesheet LPC) ----------
+function drawEnemySprite(sx, sy, e){
+  const block = SPRITE_BLOCKS.walk;
+  const dirRow = DIR_ROW[e.facing] || 0;
+  const frameIndex = e.moving ? Math.floor((e.animTime * 5) % block.frames) : 0;
+  const row = block.row + dirRow;
+  const srcX = frameIndex * FRAME;
+  const srcY = row * FRAME;
+  const scale = e.size / 24 * 1.6;
+  const dw = FRAME * scale, dh = FRAME * scale;
+
+  let alpha = 1, extraScaleY = 1;
+  if (e.deathAnim >= 0) {
+    const t = Math.min(1, e.deathAnim / 0.4);
+    alpha = 1 - t;
+    extraScaleY = 1 - t * 0.3;
   }
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.imageSmoothingEnabled = false;
+  if (e.hitFlash > 0) ctx.filter = 'brightness(2.4) saturate(0.4)';
+  ctx.translate(sx, sy - dh * 0.7 * extraScaleY);
+  ctx.scale(1, extraScaleY);
+  ctx.drawImage(e.type.img, srcX, srcY, FRAME, FRAME, -dw / 2, 0, dw, dh);
+  ctx.restore();
 }
 
 function drawEnemies(){
@@ -486,7 +541,19 @@ function drawEnemies(){
     if (!e.alive && e.deathAnim >= 0.4) continue;
     const sx = e.x - camera.x, sy = e.y - camera.y;
     if (sx < -60 || sx > canvas.width + 60 || sy < -60 || sy > canvas.height + 60) continue;
-    drawEnemySprite(sx, sy, e);
+
+    if (e.type.ready) {
+      drawEnemySprite(sx, sy, e);
+    } else {
+      drawEnemyFallback(sx, sy, e);
+    }
+
+    if (e.alive) {
+      ctx.fillStyle = 'rgba(0,0,0,.5)';
+      ctx.fillRect(sx - e.size / 2, sy - e.size / 2 - 12, e.size, 4);
+      ctx.fillStyle = '#e05c5c';
+      ctx.fillRect(sx - e.size / 2, sy - e.size / 2 - 12, e.size * (e.hp / e.hpMax), 4);
+    }
   }
 }
 
