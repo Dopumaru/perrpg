@@ -11,7 +11,23 @@ canvas{display:block;position:fixed;inset:0;width:100%;height:100%;background:#1
 .bar-fill.xp{background:linear-gradient(90deg,#3f5f7c,#6bb6ff)}
 .bar-label{font-size:.68rem;color:#9fb0cc;margin-top:2px}
 .stats div{font-size:.78rem;margin-bottom:4px;color:#cddaf0}
-.loot{max-height:120px;overflow-y:auto;min-width:180px}
+.loot,.skills{max-height:130px;overflow-y:auto;min-width:190px}
 .loot-title{font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;color:#8fa2c2;margin-bottom:6px}
 .loot-item{font-size:.74rem;color:#e6d38a;margin-bottom:2px}
-#controls{position:fixed;bottom:12px;left:50%;transform:translateX(-50%);font-size:.72rem;letter-spacing:.06em;color:#9fb0cc;z-index:5;text-align:center;padding:0 10px}
+.skill-item{font-size:.74rem;color:#a9d6ff;margin-bottom:2px}
+#controls{position:fixed;bottom:12px;left:50%;transform:translateX(-50%);font-size:.72rem;letter-spacing:.06em;color:#9fb0cc;z-index:5;text-align:center;padding:0 10px;max-width:92vw}
+
+.modal-overlay{position:fixed;inset:0;z-index:20;display:none;place-items:center;background:rgba(5,8,13,.66);backdrop-filter:blur(4px)}
+.modal-overlay.on{display:grid}
+.modal-card{width:min(92vw,640px);border:1px solid rgba(185,205,235,.2);background:linear-gradient(180deg,rgba(14,20,30,.97),rgba(8,12,18,.98));box-shadow:0 24px 70px rgba(0,0,0,.55);padding:1.6rem;text-align:center}
+.modal-title{font-size:1.1rem;letter-spacing:.08em;text-transform:uppercase;color:#f0dc8f;margin-bottom:.3rem}
+.modal-sub{font-size:.78rem;color:#a9b8d4;margin-bottom:1.1rem}
+.modal-options{display:grid;grid-template-columns:1fr 1fr 1fr;gap:.8rem;margin-bottom:1.1rem}
+.option-card{border:1px solid rgba(185,205,235,.18);background:rgba(255,255,255,.03);padding:.9rem .7rem;cursor:pointer;transition:transform .15s ease,border-color .15s ease}
+.option-card:hover{transform:translateY(-3px);border-color:rgba(120,170,255,.5)}
+.option-name{font-size:.82rem;color:#eaf1ff;margin-bottom:.4rem;font-weight:bold}
+.option-desc{font-size:.68rem;color:#9fb0cc;margin-bottom:.5rem;line-height:1.4}
+.option-level{font-size:.66rem;color:#7fd6a5}
+.btn{font:inherit;padding:.7rem 1.1rem;border:1px solid rgba(185,205,235,.2);background:rgba(120,160,220,.12);color:#eef4ff;text-transform:uppercase;letter-spacing:.06em;cursor:pointer}
+.btn.reroll:disabled{opacity:.35;cursor:not-allowed}
+@media (max-width:640px){.modal-options{grid-template-columns:1fr}}

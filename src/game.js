@@ -1,22 +1,31 @@
-// Pixel's Realm - protótipo jogável inicial
-// Movimentação top-down, combate simples, XP/nível, loot básico.
+// Pixel's Realm - protótipo jogável
+// Movimentação top-down, ataques automáticos por proximidade (corpo a corpo / distância),
+// sistema de nível/XP com modal de escolha de skills e loot básico.
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 
-function resize(){
-  canvas.width = innerWidth;
-  canvas.height = innerHeight;
-}
+function resize(){ canvas.width = innerWidth; canvas.height = innerHeight; }
 window.addEventListener('resize', resize);
 resize();
 
 const WORLD = { w: 1600, h: 1200, tile: 40 };
 
 const keys = {};
-window.addEventListener('keydown', e => { keys[e.key.toLowerCase()] = true; if (e.key === ' ') tryAttack(); });
+window.addEventListener('keydown', e => {
+  keys[e.key.toLowerCase()] = true;
+  if (e.key === '1') setWeapon('sword');
+  if (e.key === '2') setWeapon('bow');
+});
 window.addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
 
+// ---------- Armas ----------
+const WEAPONS = {
+  sword: { type: 'melee', name: 'Espada Curta', range: 58, cooldown: 0.55 },
+  bow:   { type: 'ranged', name: 'Arco Curto', range: 300, cooldown: 0.9, projectileSpeed: 460 }
+};
+
+// ---------- Loot ----------
 const lootTable = [
   { name: 'Espada Enferrujada', rarity: 'comum', chance: 0.35 },
   { name: 'Poção de Vida', rarity: 'comum', chance: 0.3 },
@@ -24,9 +33,8 @@ const lootTable = [
   { name: 'Adaga Élfica', rarity: 'raro', chance: 0.1 },
   { name: 'Coroa Esquecida', rarity: 'épico', chance: 0.03 },
 ];
-
-function rollLoot(){
-  const roll = Math.random();
+function rollLoot(bonus){
+  const roll = Math.random() * (1 - Math.min(0.6, bonus));
   let acc = 0;
   for (const item of lootTable) {
     acc += item.chance;
@@ -35,16 +43,53 @@ function rollLoot(){
   return null;
 }
 
+// ---------- Skills ----------
+const SKILL_POOL = [
+  { id: 'forca', name: 'Força Bruta', desc: '+2 de dano por nível', max: 5 },
+  { id: 'vigor', name: 'Vigor', desc: '+8 de HP máximo por nível', max: 5 },
+  { id: 'agilidade', name: 'Agilidade', desc: '+8% de velocidade de movimento por nível', max: 5 },
+  { id: 'foco', name: 'Foco de Combate', desc: '-8% no tempo de recarga do ataque por nível', max: 5 },
+  { id: 'sorte', name: 'Sorte do Aventureiro', desc: '+10% de chance de loot melhor por nível', max: 5 },
+  { id: 'guarda', name: 'Guarda de Ferro', desc: '+2 de defesa por nível', max: 5 },
+];
+
 const player = {
-  x: WORLD.w / 2, y: WORLD.h / 2, size: 26, speed: 220,
+  x: WORLD.w / 2, y: WORLD.h / 2, size: 26,
+  baseSpeed: 220, baseStr: 4, baseDef: 2, baseHpMax: 30,
   level: 1, xp: 0, xpMax: 20,
   hp: 30, hpMax: 30,
-  str: 4, def: 2,
   gold: 0,
-  attackCooldown: 0, attackRange: 46, attackDuration: 0.18, facing: 'down'
+  attackTimer: 0, attacking: 0, attackDuration: 0.18, facing: 'down',
+  weaponKey: 'sword',
+  skills: {}
 };
 
+function skillLevel(id){ return player.skills[id] || 0; }
+
+function recomputeStats(){
+  const oldHpMax = player.hpMax;
+  player.str = player.baseStr + skillLevel('forca') * 2;
+  player.def = player.baseDef + skillLevel('guarda') * 2;
+  player.speed = player.baseSpeed * (1 + skillLevel('agilidade') * 0.08);
+  player.cooldownMultiplier = Math.max(0.4, 1 - skillLevel('foco') * 0.08);
+  player.lootBonus = skillLevel('sorte') * 0.10;
+  player.hpMax = player.baseHpMax + skillLevel('vigor') * 8;
+  if (player.hpMax !== oldHpMax) {
+    player.hp = Math.min(player.hpMax, player.hp + (player.hpMax - oldHpMax));
+  }
+  updateHud();
+}
+
+function setWeapon(key){
+  if (!WEAPONS[key]) return;
+  player.weaponKey = key;
+  player.attackTimer = 0;
+  updateHud();
+}
+
 function xpForNextLevel(level){ return 20 + (level - 1) * 15; }
+
+let pendingLevelUps = 0;
 
 function gainXP(amount){
   player.xp += amount;
@@ -52,15 +97,18 @@ function gainXP(amount){
     player.xp -= player.xpMax;
     player.level += 1;
     player.xpMax = xpForNextLevel(player.level);
-    player.hpMax += 6;
-    player.hp = player.hpMax;
-    player.str += 1;
-    player.def += 1;
+    player.baseHpMax += 4;
+    player.baseStr += 0;
     logLoot(`Subiu para o nível ${player.level}!`);
+    pendingLevelUps += 1;
   }
+  recomputeStats();
+  player.hp = player.hpMax;
   updateHud();
+  if (pendingLevelUps > 0 && !modalOpen) openLevelModal();
 }
 
+// ---------- Inimigos ----------
 function makeEnemy(x, y){
   return {
     x, y, size: 24, hp: 18, hpMax: 18, str: 3, speed: 70,
@@ -71,39 +119,66 @@ function makeEnemy(x, y){
 
 let enemies = [];
 for (let i = 0; i < 10; i++) {
-  enemies.push(makeEnemy(
-    200 + Math.random() * (WORLD.w - 400),
-    200 + Math.random() * (WORLD.h - 400)
-  ));
+  enemies.push(makeEnemy(200 + Math.random() * (WORLD.w - 400), 200 + Math.random() * (WORLD.h - 400)));
 }
 
+let projectiles = [];
 let camera = { x: 0, y: 0 };
 let lastTime = performance.now();
+let modalOpen = false;
+let rerollsLeft = 2;
+let currentOffers = [];
 
-function tryAttack(){
-  if (player.attackCooldown > 0) return;
-  player.attackCooldown = 0.45;
-  player.attacking = player.attackDuration;
+// ---------- Ataque automático por proximidade ----------
+function tryAutoAttack(dt){
+  player.attackTimer -= dt;
+  if (player.attackTimer > 0) return;
 
+  const weapon = WEAPONS[player.weaponKey];
+  const range = weapon.range;
+
+  let nearest = null, nearestDist = Infinity;
   for (const e of enemies) {
     if (!e.alive) continue;
-    const dx = e.x - player.x, dy = e.y - player.y;
-    const dist = Math.hypot(dx, dy);
-    if (dist <= player.attackRange) {
-      e.hp -= Math.max(1, player.str);
-      e.hitFlash = 0.15;
-      if (e.hp <= 0) {
-        e.alive = false;
-        gainXP(e.xpReward);
-        const gold = Math.floor(e.goldReward[0] + Math.random() * (e.goldReward[1] - e.goldReward[0]));
-        player.gold += gold;
-        const loot = rollLoot();
-        if (loot) logLoot(`+${gold} ouro · ${loot.name} (${loot.rarity})`);
-        else logLoot(`+${gold} ouro`);
-        updateHud();
-        setTimeout(() => respawnEnemy(e), 3500);
-      }
+    const dist = Math.hypot(e.x - player.x, e.y - player.y);
+    if (dist <= range && dist < nearestDist) { nearest = e; nearestDist = dist; }
+  }
+  if (!nearest) return;
+
+  player.attackTimer = weapon.cooldown * player.cooldownMultiplier;
+  player.attacking = player.attackDuration;
+
+  const dx = nearest.x - player.x, dy = nearest.y - player.y;
+  player.facing = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up');
+
+  if (weapon.type === 'melee') {
+    for (const e of enemies) {
+      if (!e.alive) continue;
+      const dist = Math.hypot(e.x - player.x, e.y - player.y);
+      if (dist <= range) hitEnemy(e);
     }
+  } else {
+    projectiles.push({
+      x: player.x, y: player.y, target: nearest,
+      speed: weapon.projectileSpeed, dmg: Math.max(1, Math.round(player.str * 0.85))
+    });
+  }
+}
+
+function hitEnemy(e, overrideDmg){
+  const dmg = overrideDmg != null ? overrideDmg : Math.max(1, player.str);
+  e.hp -= dmg;
+  e.hitFlash = 0.15;
+  if (e.hp <= 0 && e.alive) {
+    e.alive = false;
+    gainXP(e.xpReward);
+    const gold = Math.floor(e.goldReward[0] + Math.random() * (e.goldReward[1] - e.goldReward[0]));
+    player.gold += gold;
+    const loot = rollLoot(player.lootBonus);
+    if (loot) logLoot(`+${gold} ouro · ${loot.name} (${loot.rarity})`);
+    else logLoot(`+${gold} ouro`);
+    updateHud();
+    setTimeout(() => respawnEnemy(e), 3500);
   }
 }
 
@@ -114,7 +189,22 @@ function respawnEnemy(e){
   e.y = 200 + Math.random() * (WORLD.h - 400);
 }
 
+function updateProjectiles(dt){
+  projectiles = projectiles.filter(p => {
+    if (!p.target.alive) return false;
+    const dx = p.target.x - p.x, dy = p.target.y - p.y;
+    const dist = Math.hypot(dx, dy);
+    if (dist < 12) { hitEnemy(p.target, p.dmg); return false; }
+    p.x += (dx / dist) * p.speed * dt;
+    p.y += (dy / dist) * p.speed * dt;
+    return true;
+  });
+}
+
+// ---------- Update / Draw ----------
 function update(dt){
+  if (modalOpen) return;
+
   let dx = 0, dy = 0;
   if (keys['w'] || keys['arrowup']) dy -= 1;
   if (keys['s'] || keys['arrowdown']) dy += 1;
@@ -130,8 +220,10 @@ function update(dt){
   player.x = Math.max(20, Math.min(WORLD.w - 20, player.x));
   player.y = Math.max(20, Math.min(WORLD.h - 20, player.y));
 
-  if (player.attackCooldown > 0) player.attackCooldown -= dt;
   if (player.attacking > 0) player.attacking -= dt;
+
+  tryAutoAttack(dt);
+  updateProjectiles(dt);
 
   for (const e of enemies) {
     if (!e.alive) continue;
@@ -142,7 +234,7 @@ function update(dt){
       e.x += (dx2 / dist) * e.speed * dt;
       e.y += (dy2 / dist) * e.speed * dt;
       if (dist < e.size + player.size * 0.5) {
-        player.hp -= e.str * dt * 1.4;
+        player.hp -= Math.max(0.4, e.str - player.def * 0.3) * dt * 1.4;
         if (player.hp < 0) player.hp = 0;
         updateHud();
       }
@@ -171,32 +263,26 @@ function drawGround(){
   ctx.strokeStyle = 'rgba(255,255,255,0.04)';
   const startX = -camera.x % WORLD.tile;
   const startY = -camera.y % WORLD.tile;
-  for (let x = startX; x < canvas.width; x += WORLD.tile) {
-    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
-  }
-  for (let y = startY; y < canvas.height; y += WORLD.tile) {
-    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
-  }
+  for (let x = startX; x < canvas.width; x += WORLD.tile) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke(); }
+  for (let y = startY; y < canvas.height; y += WORLD.tile) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke(); }
 }
 
 function drawPlayer(){
   const sx = player.x - camera.x, sy = player.y - camera.y;
+  const weapon = WEAPONS[player.weaponKey];
   ctx.save();
   ctx.translate(sx, sy);
   ctx.fillStyle = '#274a7a';
   ctx.fillRect(-player.size/2, -player.size/2, player.size, player.size);
   ctx.fillStyle = '#c98f66';
   ctx.fillRect(-8, -player.size/2 - 12, 16, 14);
+
   if (player.attacking > 0) {
-    ctx.fillStyle = 'rgba(220,230,255,0.55)';
-    let ax = 0, ay = 0;
-    if (player.facing === 'up') ay = -player.attackRange;
-    if (player.facing === 'down') ay = player.attackRange;
-    if (player.facing === 'left') ax = -player.attackRange;
-    if (player.facing === 'right') ax = player.attackRange;
+    ctx.strokeStyle = 'rgba(220,230,255,0.7)';
+    ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.arc(ax * 0.5, ay * 0.5, 20, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.arc(0, 0, weapon.range, 0, Math.PI * 2);
+    ctx.stroke();
   }
   ctx.restore();
 }
@@ -218,9 +304,17 @@ function drawEnemies(){
   }
 }
 
+function drawProjectiles(){
+  ctx.fillStyle = '#f0dc8f';
+  for (const p of projectiles) {
+    ctx.fillRect(p.x - camera.x - 3, p.y - camera.y - 3, 6, 6);
+  }
+}
+
 function draw(){
   drawGround();
   drawEnemies();
+  drawProjectiles();
   drawPlayer();
 }
 
@@ -233,6 +327,69 @@ function loop(now){
 }
 requestAnimationFrame(loop);
 
+// ---------- Modal de nível ----------
+const levelModal = document.getElementById('levelModal');
+const modalOptions = document.getElementById('modalOptions');
+const rerollBtn = document.getElementById('rerollBtn');
+const rerollCount = document.getElementById('rerollCount');
+
+function pickOffers(){
+  const pool = [...SKILL_POOL];
+  const offers = [];
+  const shuffled = pool.sort(() => Math.random() - 0.5);
+  for (const skill of shuffled) {
+    if (offers.length >= 3) break;
+    if (skill.max && skillLevel(skill.id) >= skill.max) continue;
+    offers.push(skill);
+  }
+  while (offers.length < 3 && pool.length) offers.push(pool[Math.floor(Math.random() * pool.length)]);
+  return offers.slice(0, 3);
+}
+
+function renderOffers(){
+  modalOptions.innerHTML = '';
+  currentOffers.forEach(skill => {
+    const lvl = skillLevel(skill.id);
+    const card = document.createElement('div');
+    card.className = 'option-card';
+    card.innerHTML = `
+      <div class="option-name">${skill.name}</div>
+      <div class="option-desc">${skill.desc}</div>
+      <div class="option-level">${lvl > 0 ? `Nível ${lvl} → ${lvl + 1}` : 'Nova habilidade'}</div>
+    `;
+    card.addEventListener('click', () => chooseSkill(skill.id));
+    modalOptions.appendChild(card);
+  });
+  rerollCount.textContent = rerollsLeft;
+  rerollBtn.disabled = rerollsLeft <= 0;
+}
+
+function openLevelModal(){
+  modalOpen = true;
+  rerollsLeft = 2;
+  currentOffers = pickOffers();
+  renderOffers();
+  levelModal.classList.add('on');
+}
+
+function chooseSkill(id){
+  player.skills[id] = (player.skills[id] || 0) + 1;
+  recomputeStats();
+  renderSkillsHud();
+  levelModal.classList.remove('on');
+  modalOpen = false;
+  pendingLevelUps = Math.max(0, pendingLevelUps - 1);
+  if (pendingLevelUps > 0) setTimeout(openLevelModal, 250);
+}
+
+rerollBtn.addEventListener('click', () => {
+  if (rerollsLeft <= 0) return;
+  rerollsLeft -= 1;
+  currentOffers = pickOffers();
+  renderOffers();
+});
+
+// ---------- HUD ----------
 function updateHud(){
   document.getElementById('hudLevel').textContent = player.level;
   document.getElementById('hpFill').style.width = `${Math.max(0, player.hp / player.hpMax) * 100}%`;
@@ -242,6 +399,20 @@ function updateHud(){
   document.getElementById('statStr').textContent = player.str;
   document.getElementById('statDef').textContent = player.def;
   document.getElementById('gold').textContent = player.gold;
+  document.getElementById('weaponName').textContent = WEAPONS[player.weaponKey].name;
+}
+
+function renderSkillsHud(){
+  const block = document.getElementById('skillsBlock');
+  block.innerHTML = '<div class="loot-title">Skills</div>';
+  Object.entries(player.skills).forEach(([id, lvl]) => {
+    const skill = SKILL_POOL.find(s => s.id === id);
+    if (!skill) return;
+    const line = document.createElement('div');
+    line.className = 'skill-item';
+    line.textContent = `${skill.name} · Nível ${lvl}`;
+    block.appendChild(line);
+  });
 }
 
 function logLoot(text){
@@ -253,4 +424,5 @@ function logLoot(text){
   log.scrollTop = log.scrollHeight;
 }
 
+recomputeStats();
 updateHud();

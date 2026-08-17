@@ -20,11 +20,25 @@
       <div>Força: <span id="statStr">4</span></div>
       <div>Defesa: <span id="statDef">2</span></div>
       <div>Ouro: <span id="gold">0</span></div>
+      <div>Arma: <span id="weaponName">Espada Curta</span></div>
     </div>
+    <div class="hud-block skills" id="skillsBlock"><div class="loot-title">Skills</div></div>
     <div class="hud-block loot" id="lootLog"><div class="loot-title">Loot</div></div>
   </div>
   <canvas id="game"></canvas>
-  <div id="controls">WASD ou setas para mover · Espaço para atacar · Inimigos dão XP, ouro e itens</div>
+  <div id="controls">WASD ou setas para mover · 1: Espada (corpo a corpo) · 2: Arco (distância) · Ataques acontecem automaticamente por proximidade</div>
+
+  <div class="modal-overlay" id="levelModal">
+    <div class="modal-card">
+      <div class="modal-title">Subiu de nível!</div>
+      <div class="modal-sub">Escolha uma habilidade para evoluir</div>
+      <div class="modal-options" id="modalOptions"></div>
+      <div class="modal-footer">
+        <button class="btn reroll" id="rerollBtn">Trocar opções (<span id="rerollCount">2</span>)</button>
+      </div>
+    </div>
+  </div>
+
   <script src="./src/game.js"></script>
 </body>
 </html>
