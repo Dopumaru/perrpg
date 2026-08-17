@@ -1,7 +1,7 @@
 // Pixel's Realm - protótipo jogável
 // Movimentação top-down, ataques automáticos por proximidade (corpo a corpo / distância),
-// sistema de nível/XP com modal de escolha de skills, loot básico, sprite real do jogador
-// e várias variações de inimigos com sprites reais (Universal LPC Spritesheet).
+// sistema de nível/XP com modal de escolha de skills, loot básico, sprites reais do jogador
+// e dos inimigos, e agora zonas do mapa com inimigos mais fortes e nível recomendado visível.
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -11,6 +11,7 @@ window.addEventListener('resize', resize);
 resize();
 
 const WORLD = { w: 1600, h: 1200, tile: 40 };
+const WORLD_CENTER = { x: WORLD.w / 2, y: WORLD.h / 2 };
 
 const keys = {};
 window.addEventListener('keydown', e => {
@@ -51,8 +52,9 @@ const ENEMY_TYPES = [
   { key: 'zombie', name: 'Zumbi', color: 'zombie', hp: 34, str: 2, speed: 45, xp: 20, gold: [3, 7], size: 27 },
   { key: 'zombie_toxic', name: 'Zumbi Tóxico', color: 'zombie_green', hp: 24, str: 5, speed: 55, xp: 22, gold: [5, 10], size: 26 }
 ];
-
+const ENEMY_TYPES_BY_KEY = {};
 ENEMY_TYPES.forEach(type => {
+  ENEMY_TYPES_BY_KEY[type.key] = type;
   type.img = new Image();
   type.img.crossOrigin = 'anonymous';
   type.ready = false;
@@ -60,6 +62,35 @@ ENEMY_TYPES.forEach(type => {
   type.img.onerror = () => { type.ready = false; };
   type.img.src = `${LPC_BASE}/body/bodies/skeleton/universal/${type.color}.png`;
 });
+
+// ---------- Zonas do mapa (mais distante do centro = mais forte) ----------
+const ZONES = [
+  { name: 'Vila Pacífica', min: 0, max: 260, levelLabel: 'Nível recomendado: 1–3', mult: 1, spawnCount: 4, pool: ['skeleton'] },
+  { name: 'Floresta Sombria', min: 260, max: 480, levelLabel: 'Nível recomendado: 3–6', mult: 1.7, spawnCount: 4, pool: ['skeleton', 'skeleton_frost'] },
+  { name: 'Pântano Amaldiçoado', min: 480, max: 700, levelLabel: 'Nível recomendado: 6–9', mult: 2.6, spawnCount: 4, pool: ['skeleton_dark', 'zombie'] },
+  { name: 'Covil Esquecido', min: 700, max: Infinity, levelLabel: 'Nível recomendado: 9+', mult: 3.8, spawnCount: 4, pool: ['zombie_toxic', 'skeleton_dark', 'zombie'] }
+];
+
+function zoneForDistance(dist){
+  for (const zone of ZONES) {
+    if (dist >= zone.min && dist < zone.max) return zone;
+  }
+  return ZONES[ZONES.length - 1];
+}
+
+function pickTypeForZone(zone){
+  const key = zone.pool[Math.floor(Math.random() * zone.pool.length)];
+  return ENEMY_TYPES_BY_KEY[key];
+}
+
+function randomPositionInZone(zone){
+  const angle = Math.random() * Math.PI * 2;
+  const cappedMax = Math.min(zone.max, 950);
+  const dist = zone.min + Math.random() * Math.max(20, cappedMax - zone.min);
+  const x = Math.max(60, Math.min(WORLD.w - 60, WORLD_CENTER.x + Math.cos(angle) * dist));
+  const y = Math.max(60, Math.min(WORLD.h - 60, WORLD_CENTER.y + Math.sin(angle) * dist));
+  return { x, y };
+}
 
 // ---------- Armas ----------
 const WEAPONS = {
@@ -96,7 +127,7 @@ const SKILL_POOL = [
 ];
 
 const player = {
-  x: WORLD.w / 2, y: WORLD.h / 2, size: 26,
+  x: WORLD_CENTER.x, y: WORLD_CENTER.y, size: 26,
   baseSpeed: 220, baseStr: 4, baseDef: 2, baseHpMax: 30,
   level: 1, xp: 0, xpMax: 20,
   hp: 30, hpMax: 30,
@@ -151,24 +182,46 @@ function gainXP(amount){
 }
 
 // ---------- Inimigos ----------
-function pickEnemyType(){
-  return ENEMY_TYPES[Math.floor(Math.random() * ENEMY_TYPES.length)];
-}
-
-function makeEnemy(x, y, forcedType){
-  const type = forcedType || pickEnemyType();
+function makeEnemyInZone(zone){
+  const type = pickTypeForZone(zone);
+  const pos = randomPositionInZone(zone);
+  const mult = zone.mult;
   return {
-    type,
-    x, y, size: type.size, hp: type.hp, hpMax: type.hp, str: type.str, speed: type.speed,
-    xpReward: type.xp, goldReward: type.gold, alive: true, hitFlash: 0,
+    type, zone,
+    x: pos.x, y: pos.y,
+    size: type.size,
+    hp: Math.round(type.hp * mult), hpMax: Math.round(type.hp * mult),
+    str: Math.round(type.str * (1 + (mult - 1) * 0.65)),
+    speed: type.speed,
+    xpReward: Math.round(type.xp * mult),
+    goldReward: [Math.round(type.gold[0] * mult), Math.round(type.gold[1] * mult)],
+    alive: true, hitFlash: 0,
     wanderAngle: Math.random() * Math.PI * 2, wanderTimer: 0,
     animTime: Math.random() * 10, deathAnim: -1, moving: false, facing: 'down'
   };
 }
 
 let enemies = [];
-for (let i = 0; i < 12; i++) {
-  enemies.push(makeEnemy(200 + Math.random() * (WORLD.w - 400), 200 + Math.random() * (WORLD.h - 400)));
+ZONES.forEach(zone => {
+  for (let i = 0; i < zone.spawnCount; i++) {
+    enemies.push(makeEnemyInZone(zone));
+  }
+});
+
+function respawnEnemy(e){
+  const type = pickTypeForZone(e.zone);
+  const pos = randomPositionInZone(e.zone);
+  const mult = e.zone.mult;
+  e.type = type;
+  e.x = pos.x; e.y = pos.y;
+  e.size = type.size;
+  e.hp = e.hpMax = Math.round(type.hp * mult);
+  e.str = Math.round(type.str * (1 + (mult - 1) * 0.65));
+  e.speed = type.speed;
+  e.xpReward = Math.round(type.xp * mult);
+  e.goldReward = [Math.round(type.gold[0] * mult), Math.round(type.gold[1] * mult)];
+  e.alive = true;
+  e.deathAnim = -1;
 }
 
 let projectiles = [];
@@ -177,6 +230,37 @@ let lastTime = performance.now();
 let modalOpen = false;
 let rerollsLeft = 2;
 let currentOffers = [];
+let currentZone = null;
+let zoneBannerTimeout = null;
+
+// ---------- Zona atual do jogador ----------
+const zoneChip = document.getElementById('zoneChip');
+const zoneBanner = document.getElementById('zoneBanner');
+const zoneNameEl = document.getElementById('zoneName');
+const zoneLevelEl = document.getElementById('zoneLevel');
+
+function updateZoneUI(zone){
+  zoneChip.innerHTML = `<span class="z-name">${zone.name}</span><span class="z-level">${zone.levelLabel}</span>`;
+}
+
+function showZoneBanner(zone){
+  zoneNameEl.textContent = zone.name;
+  zoneLevelEl.textContent = zone.levelLabel;
+  zoneBanner.classList.add('show');
+  if (zoneBannerTimeout) clearTimeout(zoneBannerTimeout);
+  zoneBannerTimeout = setTimeout(() => zoneBanner.classList.remove('show'), 4000);
+}
+
+function checkZoneTransition(){
+  const dist = Math.hypot(player.x - WORLD_CENTER.x, player.y - WORLD_CENTER.y);
+  const zone = zoneForDistance(dist);
+  if (zone !== currentZone) {
+    currentZone = zone;
+    updateZoneUI(zone);
+    showZoneBanner(zone);
+  }
+}
+checkZoneTransition();
 
 // ---------- Ataque automático por proximidade ----------
 function tryAutoAttack(dt){
@@ -227,25 +311,11 @@ function hitEnemy(e, overrideDmg){
     const gold = Math.floor(e.goldReward[0] + Math.random() * (e.goldReward[1] - e.goldReward[0]));
     player.gold += gold;
     const loot = rollLoot(player.lootBonus);
-    if (loot) logLoot(`+${gold} ouro · ${loot.name} (${loot.rarity}) · ${e.type.name}`);
-    else logLoot(`+${gold} ouro · ${e.type.name}`);
+    if (loot) logLoot(`+${gold} ouro · ${loot.name} (${loot.rarity}) · ${e.type.name} (${e.zone.name})`);
+    else logLoot(`+${gold} ouro · ${e.type.name} (${e.zone.name})`);
     updateHud();
     setTimeout(() => respawnEnemy(e), 3500);
   }
-}
-
-function respawnEnemy(e){
-  e.type = pickEnemyType();
-  e.size = e.type.size;
-  e.hp = e.hpMax = e.type.hp;
-  e.str = e.type.str;
-  e.speed = e.type.speed;
-  e.xpReward = e.type.xp;
-  e.goldReward = e.type.gold;
-  e.alive = true;
-  e.deathAnim = -1;
-  e.x = 200 + Math.random() * (WORLD.w - 400);
-  e.y = 200 + Math.random() * (WORLD.h - 400);
 }
 
 function updateProjectiles(dt){
@@ -283,6 +353,8 @@ function update(dt){
   }
   player.x = Math.max(20, Math.min(WORLD.w - 20, player.x));
   player.y = Math.max(20, Math.min(WORLD.h - 20, player.y));
+
+  checkZoneTransition();
 
   if (player.attacking > 0) player.attacking -= dt;
 

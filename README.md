@@ -1,6 +1,6 @@
 # Pixel's Realm
 
-Protótipo jogável de um mini MMORPG 2D em pixel art, com sistema de nível, stats, loot, combate por proximidade, árvore de skills e sprites reais animados para o jogador e para várias variações de inimigos.
+Protótipo jogável de um mini MMORPG 2D em pixel art, com sistema de nível, stats, loot, combate por proximidade, árvore de skills, sprites reais animados e agora zonas do mapa com dificuldade crescente.
 
 ## Como jogar
 
@@ -12,6 +12,23 @@ Controles:
 - `2`: equipar Arco Curto (à distância)
 
 Os ataques são **automáticos por proximidade**: se um inimigo entrar no raio de alcance da arma equipada, o personagem ataca sozinho, sem precisar apertar um botão de ataque.
+
+## Zonas do mapa e dificuldade
+
+O mapa agora é dividido em 4 zonas concêntricas, a partir do ponto onde o jogador nasce. Quanto mais longe do centro, mais forte fica a região:
+
+| Zona | Distância do centro | Nível recomendado | Multiplicador de dificuldade | Inimigos |
+|---|---|---|---|---|
+| Vila Pacífica | 0–260 | 1–3 | x1.0 | Esqueleto |
+| Floresta Sombria | 260–480 | 3–6 | x1.7 | Esqueleto, Esqueleto Gélido |
+| Pântano Amaldiçoado | 480–700 | 6–9 | x2.6 | Esqueleto Sombrio, Zumbi |
+| Covil Esquecido | 700+ | 9+ | x3.8 | Zumbi Tóxico, Esqueleto Sombrio, Zumbi |
+
+O multiplicador de dificuldade aumenta o HP, a força e as recompensas (XP e ouro) dos inimigos daquela zona, então enfrentar o Covil Esquecido no nível 1 é bem mais arriscado do que ficar perto da Vila Pacífica.
+
+### Indicador de zona na tela
+
+Assim que o jogador entra em uma nova zona, um **banner central** aparece por alguns segundos mostrando o nome da região e o nível recomendado (ex.: "Pântano Amaldiçoado · Nível recomendado: 6–9"). Além disso, um **chip fixo no canto superior direito** sempre mostra a zona atual, para o jogador nunca perder a referência de onde está.
 
 ## Sprite real do jogador
 
@@ -25,17 +42,7 @@ recortadas do spritesheet oficial em tempo real, por direção (cima, baixo, esq
 
 ## Variações de inimigos com sprites reais
 
-Os inimigos agora usam o mesmo tipo de spritesheet real (layout Universal LPC), com 5 variações diferentes, cada uma com estatísticas próprias:
-
-| Inimigo | HP | Força | Velocidade | XP | Ouro |
-|---|---|---|---|---|---|
-| Esqueleto | 18 | 3 | 70 | 12 | 2–6 |
-| Esqueleto Sombrio | 26 | 4 | 62 | 18 | 4–9 |
-| Esqueleto Gélido | 20 | 3 | 82 | 16 | 3–8 |
-| Zumbi | 34 | 2 | 45 | 20 | 3–7 |
-| Zumbi Tóxico | 24 | 5 | 55 | 22 | 5–10 |
-
-Cada inimigo sorteia seu tipo ao nascer e novamente ao reaparecer após ser derrotado, então o mundo tem variedade constante. Todos usam animação real de andar, viram na direção do movimento e mostram flash de dano e encolhimento ao morrer.
+Os inimigos usam o mesmo tipo de spritesheet real (layout Universal LPC), com 5 variações diferentes. As estatísticas base de cada tipo são multiplicadas pela zona em que o inimigo nasce (veja a tabela de zonas acima). Cada inimigo sorteia seu tipo dentro do conjunto permitido pela sua zona, tanto ao nascer quanto ao reaparecer após ser derrotado — assim a variedade e a dificuldade da região se mantêm.
 
 Se o sprite de um tipo específico não carregar, o jogo usa automaticamente uma versão processual em canvas como alternativa, para nunca deixar a tela em branco.
 
@@ -69,23 +76,23 @@ O jogador pode escolher uma habilidade nova (começa no nível 1) ou uma já pos
 
 ## Sistema de loot
 
-Ao derrotar um inimigo, há chance de ganhar ouro e itens com raridades diferentes (comum, raro, épico). A skill "Sorte do Aventureiro" aumenta a chance de itens melhores. O log de loot também mostra qual tipo de inimigo foi derrotado.
+Ao derrotar um inimigo, há chance de ganhar ouro e itens com raridades diferentes (comum, raro, épico), com valores escalados pela zona. A skill "Sorte do Aventureiro" aumenta a chance de itens melhores. O log de loot mostra o tipo de inimigo e a zona em que ele foi derrotado.
 
 ## Estrutura do projeto
 
 ```
-index.html              -> tela principal do protótipo jogável, com HUD e modal de nível
-assets/ui/style.css      -> estilos do HUD, HUD de skills e modal de escolha de habilidade
+index.html              -> tela principal do protótipo jogável, com HUD, indicador de zona e modal de nível
+assets/ui/style.css      -> estilos do HUD, indicador de zona, HUD de skills e modal de escolha de habilidade
 assets/backgrounds/      -> imagens de fundo usadas em outras telas do projeto
 screens/                 -> telas adicionais (criação de personagem, etc.)
-src/game.js              -> lógica principal: movimento, armas, combate por proximidade, XP, skills, loot e sprites reais
+src/game.js              -> lógica principal: movimento, armas, combate por proximidade, XP, skills, loot, zonas do mapa e sprites reais
 src/main.js              -> lógica da tela inicial (título animado)
 ```
 
 ## Próximos passos sugeridos
 
+- Desenhar visualmente os limites das zonas no mapa (ex.: névoa, cor do chão diferente por região).
 - Baixar os spritesheets e hospedá-los dentro do próprio repositório, em vez de carregá-los de uma URL externa.
-- Adicionar mais variações de inimigo (ex.: bandido, orc, morcego) usando outros corpos do mesmo projeto LPC.
+- Adicionar mais variações de inimigo por zona (ex.: bandido, orc, morcego) usando outros corpos do mesmo projeto LPC.
 - Adicionar inventário visual e equipamento de itens obtidos como loot.
 - Conectar a tela de criação de personagem para definir a arma e a classe inicial do jogador.
-- Adicionar sons e efeitos visuais de combate (corte, disparo de flecha, acerto crítico).

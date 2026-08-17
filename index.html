@@ -1,10 +1,10 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Pixel's Realm - Protótipo Jogável</title>
-<link rel="stylesheet" href="./assets/ui/style.css" />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pixel's Realm - Protótipo Jogável</title>
+  <link rel="stylesheet" href="./assets/ui/style.css" />
 </head>
 <body>
   <div id="hud">
@@ -25,6 +25,13 @@
     <div class="hud-block skills" id="skillsBlock"><div class="loot-title">Skills</div></div>
     <div class="hud-block loot" id="lootLog"><div class="loot-title">Loot</div></div>
   </div>
+
+  <div class="zone-chip" id="zoneChip"></div>
+  <div class="zone-banner" id="zoneBanner">
+    <div class="zone-name" id="zoneName"></div>
+    <div class="zone-level" id="zoneLevel"></div>
+  </div>
+
   <canvas id="game"></canvas>
   <div id="controls">WASD ou setas para mover · 1: Espada (corpo a corpo) · 2: Arco (distância) · Ataques acontecem automaticamente por proximidade</div>
 
