@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Pixel's Realm - Protótipo Jogável</title>
+<link rel="stylesheet" href="./assets/ui/style.css" />
+</head>
+<body>
+  <div id="hud">
+    <div class="hud-block">
+      <div class="hud-name" id="hudName">Pixel</div>
+      <div class="hud-row">Nível <span id="hudLevel">1</span></div>
+      <div class="bar"><div class="bar-fill hp" id="hpFill"></div></div>
+      <div class="bar-label">HP: <span id="hpText">30/30</span></div>
+      <div class="bar"><div class="bar-fill xp" id="xpFill"></div></div>
+      <div class="bar-label">XP: <span id="xpText">0/20</span></div>
+    </div>
+    <div class="hud-block stats">
+      <div>Força: <span id="statStr">4</span></div>
+      <div>Defesa: <span id="statDef">2</span></div>
+      <div>Ouro: <span id="gold">0</span></div>
+    </div>
+    <div class="hud-block loot" id="lootLog"><div class="loot-title">Loot</div></div>
+  </div>
+  <canvas id="game"></canvas>
+  <div id="controls">WASD ou setas para mover · Espaço para atacar · Inimigos dão XP, ouro e itens</div>
+  <script src="./src/game.js"></script>
+</body>
+</html>
