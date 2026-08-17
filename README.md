@@ -1,6 +1,6 @@
 # Pixel's Realm
 
-Protótipo jogável de um mini MMORPG 2D em pixel art, com sistema de nível, stats, loot, combate por proximidade, árvore de skills, sprites reais animados e agora zonas do mapa com dificuldade crescente.
+Protótipo jogável de um mini MMORPG 2D em pixel art, com sistema de nível, stats, loot, combate por proximidade, árvore de skills, sprites reais animados e zonas do mapa com dificuldade crescente e agora diferenciação visual do chão por região.
 
 ## Como jogar
 
@@ -13,22 +13,26 @@ Controles:
 
 Os ataques são **automáticos por proximidade**: se um inimigo entrar no raio de alcance da arma equipada, o personagem ataca sozinho, sem precisar apertar um botão de ataque.
 
-## Zonas do mapa e dificuldade
+## Zonas do mapa, dificuldade e visual
 
-O mapa agora é dividido em 4 zonas concêntricas, a partir do ponto onde o jogador nasce. Quanto mais longe do centro, mais forte fica a região:
+O mapa é dividido em 4 zonas concêntricas, a partir do ponto onde o jogador nasce. Quanto mais longe do centro, mais forte fica a região — e agora isso também aparece visualmente no chão:
 
-| Zona | Distância do centro | Nível recomendado | Multiplicador de dificuldade | Inimigos |
-|---|---|---|---|---|
-| Vila Pacífica | 0–260 | 1–3 | x1.0 | Esqueleto |
-| Floresta Sombria | 260–480 | 3–6 | x1.7 | Esqueleto, Esqueleto Gélido |
-| Pântano Amaldiçoado | 480–700 | 6–9 | x2.6 | Esqueleto Sombrio, Zumbi |
-| Covil Esquecido | 700+ | 9+ | x3.8 | Zumbi Tóxico, Esqueleto Sombrio, Zumbi |
+| Zona | Distância do centro | Nível recomendado | Dificuldade | Cor do chão | Inimigos |
+|---|---|---|---|---|---|
+| Vila Pacífica | 0–260 | 1–3 | x1.0 | Verde suave | Esqueleto |
+| Floresta Sombria | 260–480 | 3–6 | x1.7 | Verde-azulado escuro | Esqueleto, Esqueleto Gélido |
+| Pântano Amaldiçoado | 480–700 | 6–9 | x2.6 | Verde-oliva pantanoso | Esqueleto Sombrio, Zumbi |
+| Covil Esquecido | 700+ | 9+ | x3.8 | Vermelho-escuro sombrio | Zumbi Tóxico, Esqueleto Sombrio, Zumbi |
 
-O multiplicador de dificuldade aumenta o HP, a força e as recompensas (XP e ouro) dos inimigos daquela zona, então enfrentar o Covil Esquecido no nível 1 é bem mais arriscado do que ficar perto da Vila Pacífica.
+O multiplicador de dificuldade aumenta o HP, a força e as recompensas (XP e ouro) dos inimigos daquela zona.
+
+### Diferenciação visual das zonas
+
+Cada zona agora tem sua própria cor de chão, desenhada como um círculo concêntrico ao redor do ponto de nascimento do jogador, com uma névoa colorida sutil perto da borda de cada região e uma linha pontilhada marcando a transição para a próxima zona. Isso permite ao jogador perceber visualmente que está mudando de área, além do banner e do chip de texto que já indicam o nome e o nível recomendado.
 
 ### Indicador de zona na tela
 
-Assim que o jogador entra em uma nova zona, um **banner central** aparece por alguns segundos mostrando o nome da região e o nível recomendado (ex.: "Pântano Amaldiçoado · Nível recomendado: 6–9"). Além disso, um **chip fixo no canto superior direito** sempre mostra a zona atual, para o jogador nunca perder a referência de onde está.
+Assim que o jogador entra em uma nova zona, um **banner central** aparece por alguns segundos mostrando o nome da região e o nível recomendado (ex.: "Pântano Amaldiçoado · Nível recomendado: 6–9"). Além disso, um **chip fixo no canto superior direito** sempre mostra a zona atual.
 
 ## Sprite real do jogador
 
@@ -42,9 +46,9 @@ recortadas do spritesheet oficial em tempo real, por direção (cima, baixo, esq
 
 ## Variações de inimigos com sprites reais
 
-Os inimigos usam o mesmo tipo de spritesheet real (layout Universal LPC), com 5 variações diferentes. As estatísticas base de cada tipo são multiplicadas pela zona em que o inimigo nasce (veja a tabela de zonas acima). Cada inimigo sorteia seu tipo dentro do conjunto permitido pela sua zona, tanto ao nascer quanto ao reaparecer após ser derrotado — assim a variedade e a dificuldade da região se mantêm.
+Os inimigos usam o mesmo tipo de spritesheet real (layout Universal LPC), com 5 variações diferentes. As estatísticas base de cada tipo são multiplicadas pela zona em que o inimigo nasce. Cada inimigo sorteia seu tipo dentro do conjunto permitido pela sua zona, tanto ao nascer quanto ao reaparecer após ser derrotado.
 
-Se o sprite de um tipo específico não carregar, o jogo usa automaticamente uma versão processual em canvas como alternativa, para nunca deixar a tela em branco.
+Se um sprite não carregar, o jogo usa automaticamente uma versão processual em canvas como alternativa, para nunca deixar a tela em branco.
 
 ### Créditos e licença dos sprites
 
@@ -85,14 +89,14 @@ index.html              -> tela principal do protótipo jogável, com HUD, indic
 assets/ui/style.css      -> estilos do HUD, indicador de zona, HUD de skills e modal de escolha de habilidade
 assets/backgrounds/      -> imagens de fundo usadas em outras telas do projeto
 screens/                 -> telas adicionais (criação de personagem, etc.)
-src/game.js              -> lógica principal: movimento, armas, combate por proximidade, XP, skills, loot, zonas do mapa e sprites reais
+src/game.js              -> lógica principal: movimento, armas, combate por proximidade, XP, skills, loot, zonas do mapa (com visual) e sprites reais
 src/main.js              -> lógica da tela inicial (título animado)
 ```
 
 ## Próximos passos sugeridos
 
-- Desenhar visualmente os limites das zonas no mapa (ex.: névoa, cor do chão diferente por região).
 - Baixar os spritesheets e hospedá-los dentro do próprio repositório, em vez de carregá-los de uma URL externa.
 - Adicionar mais variações de inimigo por zona (ex.: bandido, orc, morcego) usando outros corpos do mesmo projeto LPC.
+- Adicionar elementos de cenário próprios de cada zona (árvores na floresta, lama no pântano, ossos no covil).
 - Adicionar inventário visual e equipamento de itens obtidos como loot.
 - Conectar a tela de criação de personagem para definir a arma e a classe inicial do jogador.

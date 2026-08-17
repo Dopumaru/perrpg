@@ -1,7 +1,8 @@
 // Pixel's Realm - protótipo jogável
 // Movimentação top-down, ataques automáticos por proximidade (corpo a corpo / distância),
 // sistema de nível/XP com modal de escolha de skills, loot básico, sprites reais do jogador
-// e dos inimigos, e agora zonas do mapa com inimigos mais fortes e nível recomendado visível.
+// e dos inimigos, zonas do mapa com inimigos mais fortes, nível recomendado visível
+// e agora diferenciação visual do chão/ambiente por zona.
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -65,11 +66,24 @@ ENEMY_TYPES.forEach(type => {
 
 // ---------- Zonas do mapa (mais distante do centro = mais forte) ----------
 const ZONES = [
-  { name: 'Vila Pacífica', min: 0, max: 260, levelLabel: 'Nível recomendado: 1–3', mult: 1, spawnCount: 4, pool: ['skeleton'] },
-  { name: 'Floresta Sombria', min: 260, max: 480, levelLabel: 'Nível recomendado: 3–6', mult: 1.7, spawnCount: 4, pool: ['skeleton', 'skeleton_frost'] },
-  { name: 'Pântano Amaldiçoado', min: 480, max: 700, levelLabel: 'Nível recomendado: 6–9', mult: 2.6, spawnCount: 4, pool: ['skeleton_dark', 'zombie'] },
-  { name: 'Covil Esquecido', min: 700, max: Infinity, levelLabel: 'Nível recomendado: 9+', mult: 3.8, spawnCount: 4, pool: ['zombie_toxic', 'skeleton_dark', 'zombie'] }
+  {
+    name: 'Vila Pacífica', min: 0, max: 260, levelLabel: 'Nível recomendado: 1–3', mult: 1, spawnCount: 4, pool: ['skeleton'],
+    groundColor: '#16241c', tileColor: 'rgba(255,255,255,0.045)', fogColor: 'rgba(120,200,150,0.05)', borderColor: 'rgba(150,220,170,0.35)'
+  },
+  {
+    name: 'Floresta Sombria', min: 260, max: 480, levelLabel: 'Nível recomendado: 3–6', mult: 1.7, spawnCount: 4, pool: ['skeleton', 'skeleton_frost'],
+    groundColor: '#10241f', tileColor: 'rgba(150,220,255,0.04)', fogColor: 'rgba(90,180,210,0.06)', borderColor: 'rgba(120,200,230,0.35)'
+  },
+  {
+    name: 'Pântano Amaldiçoado', min: 480, max: 700, levelLabel: 'Nível recomendado: 6–9', mult: 2.6, spawnCount: 4, pool: ['skeleton_dark', 'zombie'],
+    groundColor: '#1e2016', tileColor: 'rgba(190,210,120,0.045)', fogColor: 'rgba(150,170,70,0.08)', borderColor: 'rgba(190,205,110,0.35)'
+  },
+  {
+    name: 'Covil Esquecido', min: 700, max: Infinity, levelLabel: 'Nível recomendado: 9+', mult: 3.8, spawnCount: 4, pool: ['zombie_toxic', 'skeleton_dark', 'zombie'],
+    groundColor: '#221016', tileColor: 'rgba(255,120,140,0.05)', fogColor: 'rgba(200,60,90,0.1)', borderColor: 'rgba(230,90,110,0.4)'
+  }
 ];
+const ZONE_DRAW_MAX_RADIUS = 1500;
 
 function zoneForDistance(dist){
   for (const zone of ZONES) {
@@ -400,10 +414,48 @@ function update(dt){
   camera.y = Math.max(0, Math.min(WORLD.h - canvas.height, camera.y));
 }
 
-function drawGround(){
-  ctx.fillStyle = '#132018';
+// ---------- Chão diferenciado por zona ----------
+function drawZoneGround(){
+  const centerX = WORLD_CENTER.x - camera.x;
+  const centerY = WORLD_CENTER.y - camera.y;
+
+  ctx.fillStyle = ZONES[ZONES.length - 1].groundColor;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  const reversed = [...ZONES].reverse();
+  for (const zone of reversed) {
+    const radius = zone.max === Infinity ? ZONE_DRAW_MAX_RADIUS : zone.max;
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+    ctx.fillStyle = zone.groundColor;
+    ctx.fill();
+  }
+
+  for (const zone of reversed) {
+    const radius = zone.max === Infinity ? ZONE_DRAW_MAX_RADIUS : zone.max;
+    const grad = ctx.createRadialGradient(centerX, centerY, Math.max(0, radius - 140), centerX, centerY, radius);
+    grad.addColorStop(0, 'rgba(0,0,0,0)');
+    grad.addColorStop(1, zone.fogColor);
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.save();
+  ctx.setLineDash([12, 10]);
+  ctx.lineWidth = 2;
+  ZONES.forEach(zone => {
+    if (zone.max === Infinity) return;
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, zone.max, 0, Math.PI * 2);
+    ctx.strokeStyle = zone.borderColor;
+    ctx.stroke();
+  });
+  ctx.restore();
+
   ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+  ctx.lineWidth = 1;
   const startX = -camera.x % WORLD.tile;
   const startY = -camera.y % WORLD.tile;
   for (let x = startX; x < canvas.width; x += WORLD.tile) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke(); }
@@ -644,7 +696,7 @@ function drawProjectiles(){
 }
 
 function draw(){
-  drawGround();
+  drawZoneGround();
   drawEnemies();
   drawProjectiles();
   drawPlayer();
