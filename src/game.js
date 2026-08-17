@@ -1,6 +1,7 @@
 // Pixel's Realm - protótipo jogável
 // Movimentação top-down, ataques automáticos por proximidade (corpo a corpo / distância),
-// sistema de nível/XP com modal de escolha de skills e loot básico.
+// sistema de nível/XP com modal de escolha de skills, loot básico e personagens
+// desenhados como sprites animados em canvas (ciclo de andar, golpe de ataque, dano e morte).
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -59,9 +60,10 @@ const player = {
   level: 1, xp: 0, xpMax: 20,
   hp: 30, hpMax: 30,
   gold: 0,
-  attackTimer: 0, attacking: 0, attackDuration: 0.18, facing: 'down',
+  attackTimer: 0, attacking: 0, attackDuration: 0.28, facing: 'down',
   weaponKey: 'sword',
-  skills: {}
+  skills: {},
+  walkTime: 0, moving: false
 };
 
 function skillLevel(id){ return player.skills[id] || 0; }
@@ -98,7 +100,6 @@ function gainXP(amount){
     player.level += 1;
     player.xpMax = xpForNextLevel(player.level);
     player.baseHpMax += 4;
-    player.baseStr += 0;
     logLoot(`Subiu para o nível ${player.level}!`);
     pendingLevelUps += 1;
   }
@@ -113,7 +114,8 @@ function makeEnemy(x, y){
   return {
     x, y, size: 24, hp: 18, hpMax: 18, str: 3, speed: 70,
     xpReward: 12, goldReward: [2, 6], alive: true, hitFlash: 0,
-    wanderAngle: Math.random() * Math.PI * 2, wanderTimer: 0
+    wanderAngle: Math.random() * Math.PI * 2, wanderTimer: 0,
+    animTime: Math.random() * 10, deathAnim: -1, moving: false
   };
 }
 
@@ -160,7 +162,8 @@ function tryAutoAttack(dt){
   } else {
     projectiles.push({
       x: player.x, y: player.y, target: nearest,
-      speed: weapon.projectileSpeed, dmg: Math.max(1, Math.round(player.str * 0.85))
+      speed: weapon.projectileSpeed, dmg: Math.max(1, Math.round(player.str * 0.85)),
+      angle: Math.atan2(dy, dx)
     });
   }
 }
@@ -171,6 +174,7 @@ function hitEnemy(e, overrideDmg){
   e.hitFlash = 0.15;
   if (e.hp <= 0 && e.alive) {
     e.alive = false;
+    e.deathAnim = 0;
     gainXP(e.xpReward);
     const gold = Math.floor(e.goldReward[0] + Math.random() * (e.goldReward[1] - e.goldReward[0]));
     player.gold += gold;
@@ -185,6 +189,7 @@ function hitEnemy(e, overrideDmg){
 function respawnEnemy(e){
   e.alive = true;
   e.hp = e.hpMax;
+  e.deathAnim = -1;
   e.x = 200 + Math.random() * (WORLD.w - 400);
   e.y = 200 + Math.random() * (WORLD.h - 400);
 }
@@ -195,6 +200,7 @@ function updateProjectiles(dt){
     const dx = p.target.x - p.x, dy = p.target.y - p.y;
     const dist = Math.hypot(dx, dy);
     if (dist < 12) { hitEnemy(p.target, p.dmg); return false; }
+    p.angle = Math.atan2(dy, dx);
     p.x += (dx / dist) * p.speed * dt;
     p.y += (dy / dist) * p.speed * dt;
     return true;
@@ -211,11 +217,15 @@ function update(dt){
   if (keys['a'] || keys['arrowleft']) dx -= 1;
   if (keys['d'] || keys['arrowright']) dx += 1;
   const len = Math.hypot(dx, dy);
+  player.moving = len > 0;
   if (len > 0) {
     dx /= len; dy /= len;
     player.x += dx * player.speed * dt;
     player.y += dy * player.speed * dt;
     player.facing = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up');
+    player.walkTime += dt * 9;
+  } else {
+    player.walkTime += dt * 3;
   }
   player.x = Math.max(20, Math.min(WORLD.w - 20, player.x));
   player.y = Math.max(20, Math.min(WORLD.h - 20, player.y));
@@ -226,11 +236,14 @@ function update(dt){
   updateProjectiles(dt);
 
   for (const e of enemies) {
+    if (e.deathAnim >= 0) { e.deathAnim += dt; continue; }
     if (!e.alive) continue;
+    e.animTime += dt;
     if (e.hitFlash > 0) e.hitFlash -= dt;
     const dx2 = player.x - e.x, dy2 = player.y - e.y;
     const dist = Math.hypot(dx2, dy2);
     if (dist < 240) {
+      e.moving = true;
       e.x += (dx2 / dist) * e.speed * dt;
       e.y += (dy2 / dist) * e.speed * dt;
       if (dist < e.size + player.size * 0.5) {
@@ -244,6 +257,7 @@ function update(dt){
         e.wanderAngle = Math.random() * Math.PI * 2;
         e.wanderTimer = 1.5 + Math.random() * 1.5;
       }
+      e.moving = true;
       e.x += Math.cos(e.wanderAngle) * e.speed * 0.35 * dt;
       e.y += Math.sin(e.wanderAngle) * e.speed * 0.35 * dt;
     }
@@ -267,47 +281,172 @@ function drawGround(){
   for (let y = startY; y < canvas.height; y += WORLD.tile) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke(); }
 }
 
-function drawPlayer(){
-  const sx = player.x - camera.x, sy = player.y - camera.y;
-  const weapon = WEAPONS[player.weaponKey];
-  ctx.save();
-  ctx.translate(sx, sy);
-  ctx.fillStyle = '#274a7a';
-  ctx.fillRect(-player.size/2, -player.size/2, player.size, player.size);
-  ctx.fillStyle = '#c98f66';
-  ctx.fillRect(-8, -player.size/2 - 12, 16, 14);
+// ---------- Sprite do jogador (desenhado por partes animadas) ----------
+function drawHumanoid(sx, sy, opts){
+  const { walkTime, moving, facing, attacking, attackDuration, weaponType, size, skinColor, tunicColor, hairColor } = opts;
+  const legSwing = moving ? Math.sin(walkTime) * 6 : Math.sin(walkTime) * 1.2;
+  const bob = moving ? Math.abs(Math.sin(walkTime)) * 2.4 : Math.abs(Math.sin(walkTime * 0.6)) * 0.6;
+  const attackProgress = attacking > 0 ? 1 - (attacking / attackDuration) : null;
 
-  if (player.attacking > 0) {
-    ctx.strokeStyle = 'rgba(220,230,255,0.7)';
+  ctx.save();
+  ctx.translate(sx, sy - bob);
+
+  // pernas
+  ctx.fillStyle = '#1b2433';
+  ctx.fillRect(-9, 6 + legSwing * 0.4, 8, 16 - legSwing);
+  ctx.fillRect(1, 6 - legSwing * 0.4, 8, 16 + legSwing);
+
+  // corpo / túnica
+  ctx.fillStyle = tunicColor;
+  ctx.beginPath();
+  ctx.moveTo(-12, -14);
+  ctx.lineTo(12, -14);
+  ctx.lineTo(15, 10);
+  ctx.lineTo(-15, 10);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = 'rgba(0,0,0,0.15)';
+  ctx.fillRect(-12, 4, 24, 4);
+
+  // braço de trás
+  ctx.fillStyle = skinColor;
+  ctx.fillRect(facing === 'left' ? 8 : -12, -8, 6, 14);
+
+  // cabeça
+  ctx.fillStyle = skinColor;
+  ctx.fillRect(-8, -30, 16, 16);
+  ctx.fillStyle = hairColor;
+  ctx.fillRect(-9, -32, 18, 7);
+  if (facing === 'left') ctx.fillRect(-9, -30, 5, 12);
+  if (facing === 'right') ctx.fillRect(4, -30, 5, 12);
+
+  // braço da frente + arma
+  const shoulderX = facing === 'left' ? -10 : 10;
+  ctx.save();
+  ctx.translate(shoulderX, -6);
+
+  let swingAngle = 0;
+  if (attackProgress != null && weaponType === 'melee') {
+    const t = attackProgress;
+    swingAngle = (t < 0.5 ? -1 + t * 4 : 1 - (t - 0.5) * 4) * 1.1;
+  } else if (moving) {
+    swingAngle = Math.sin(walkTime + Math.PI) * 0.25;
+  }
+  ctx.rotate(swingAngle * (facing === 'left' ? -1 : 1));
+
+  ctx.fillStyle = skinColor;
+  ctx.fillRect(-3, 0, 6, 14);
+
+  if (weaponType === 'melee') {
+    ctx.fillStyle = '#c9d3e0';
+    ctx.fillRect(-2, 10, 4, 22);
+    ctx.fillStyle = '#8a6a3a';
+    ctx.fillRect(-4, 8, 8, 4);
+  } else {
+    const draw = attackProgress != null ? Math.min(1, attackProgress * 2) : 0.15;
+    ctx.strokeStyle = '#8a6a3a';
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.arc(0, 0, weapon.range, 0, Math.PI * 2);
+    ctx.moveTo(-2, 4);
+    ctx.quadraticCurveTo(10 + draw * 6, 14, -2, 24);
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(230,230,230,0.85)';
+    ctx.beginPath();
+    ctx.moveTo(-2, 4);
+    ctx.lineTo(-2 - draw * 10, 14);
+    ctx.lineTo(-2, 24);
     ctx.stroke();
   }
   ctx.restore();
+  ctx.restore();
 }
 
-function drawEnemies(){
-  for (const e of enemies) {
-    if (!e.alive) continue;
-    const sx = e.x - camera.x, sy = e.y - camera.y;
-    if (sx < -60 || sx > canvas.width + 60 || sy < -60 || sy > canvas.height + 60) continue;
+function drawPlayer(){
+  const sx = player.x - camera.x, sy = player.y - camera.y;
+  const weapon = WEAPONS[player.weaponKey];
+  drawHumanoid(sx, sy, {
+    walkTime: player.walkTime, moving: player.moving, facing: player.facing,
+    attacking: player.attacking, attackDuration: player.attackDuration,
+    weaponType: weapon.type, size: player.size,
+    skinColor: '#c98f66', tunicColor: '#2c4d82', hairColor: '#2c241f'
+  });
+  if (player.attacking > 0) {
     ctx.save();
     ctx.translate(sx, sy);
-    ctx.fillStyle = e.hitFlash > 0 ? '#ffffff' : '#8a3838';
-    ctx.fillRect(-e.size/2, -e.size/2, e.size, e.size);
-    ctx.fillStyle = 'rgba(0,0,0,.5)';
-    ctx.fillRect(-e.size/2, -e.size/2 - 10, e.size, 4);
-    ctx.fillStyle = '#e05c5c';
-    ctx.fillRect(-e.size/2, -e.size/2 - 10, e.size * (e.hp / e.hpMax), 4);
+    ctx.strokeStyle = 'rgba(220,230,255,0.35)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(0, 0, weapon.range, 0, Math.PI * 2);
+    ctx.stroke();
     ctx.restore();
   }
 }
 
+// ---------- Sprite dos inimigos ----------
+function drawEnemySprite(sx, sy, e){
+  const squish = e.moving ? Math.abs(Math.sin(e.animTime * 6)) * 0.12 : Math.abs(Math.sin(e.animTime * 2)) * 0.04;
+  let scaleX = 1 + squish, scaleY = 1 - squish, alpha = 1;
+
+  if (e.deathAnim >= 0) {
+    const t = Math.min(1, e.deathAnim / 0.4);
+    scaleX = 1 - t * 0.4;
+    scaleY = 1 - t * 0.4 + t * 0.5;
+    alpha = 1 - t;
+  }
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.translate(sx, sy);
+  ctx.scale(scaleX, scaleY);
+
+  ctx.fillStyle = e.hitFlash > 0 ? '#ffffff' : '#8a3838';
+  ctx.beginPath();
+  ctx.moveTo(-e.size / 2, e.size / 2);
+  ctx.quadraticCurveTo(-e.size / 2, -e.size / 2, 0, -e.size / 2 - 4);
+  ctx.quadraticCurveTo(e.size / 2, -e.size / 2, e.size / 2, e.size / 2);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = '#3a1414';
+  ctx.fillRect(-e.size / 2 + 3, e.size / 2 - 4, 6, 6);
+  ctx.fillRect(e.size / 2 - 9, e.size / 2 - 4, 6, 6);
+
+  ctx.fillStyle = '#ffe66b';
+  const eyeOffset = e.moving ? Math.sin(e.animTime * 6) * 1.4 : 0;
+  ctx.fillRect(-6 + eyeOffset, -e.size / 2 + 2, 4, 4);
+  ctx.fillRect(3 + eyeOffset, -e.size / 2 + 2, 4, 4);
+
+  ctx.restore();
+
+  if (e.alive) {
+    ctx.fillStyle = 'rgba(0,0,0,.5)';
+    ctx.fillRect(sx - e.size / 2, sy - e.size / 2 - 10, e.size, 4);
+    ctx.fillStyle = '#e05c5c';
+    ctx.fillRect(sx - e.size / 2, sy - e.size / 2 - 10, e.size * (e.hp / e.hpMax), 4);
+  }
+}
+
+function drawEnemies(){
+  for (const e of enemies) {
+    if (!e.alive && e.deathAnim < 0) continue;
+    if (!e.alive && e.deathAnim >= 0.4) continue;
+    const sx = e.x - camera.x, sy = e.y - camera.y;
+    if (sx < -60 || sx > canvas.width + 60 || sy < -60 || sy > canvas.height + 60) continue;
+    drawEnemySprite(sx, sy, e);
+  }
+}
+
 function drawProjectiles(){
-  ctx.fillStyle = '#f0dc8f';
   for (const p of projectiles) {
-    ctx.fillRect(p.x - camera.x - 3, p.y - camera.y - 3, 6, 6);
+    const sx = p.x - camera.x, sy = p.y - camera.y;
+    ctx.save();
+    ctx.translate(sx, sy);
+    ctx.rotate(p.angle || 0);
+    ctx.fillStyle = '#8a6a3a';
+    ctx.fillRect(-8, -1, 14, 2);
+    ctx.fillStyle = '#f0dc8f';
+    ctx.fillRect(5, -2, 4, 4);
+    ctx.restore();
   }
 }
 
